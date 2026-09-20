@@ -9,8 +9,8 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-use ffmpeg_the_third as ffmpeg;
 use ffmpeg::{codec, format, media};
+use ffmpeg_the_third as ffmpeg;
 
 const INPUT_RATE: u32 = 48_000;
 const TARGET_RATE: u32 = 44_100;
@@ -84,7 +84,10 @@ fn transcode_audio_honors_requested_output_sample_rate() {
         .status()
         .expect("failed to run transcode-audio example");
 
-    assert!(status.success(), "transcode-audio example exited with an error");
+    assert!(
+        status.success(),
+        "transcode-audio example exited with an error"
+    );
 
     let actual_rate = output_sample_rate(&output_path);
     assert_eq!(
