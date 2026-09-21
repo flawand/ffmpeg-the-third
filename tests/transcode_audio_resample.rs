@@ -23,22 +23,47 @@ fn cargo_bin() -> String {
     std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string())
 }
 
-/// Generates a short sine-wave WAV fixture at `INPUT_RATE` using the system
-/// `ffmpeg` binary, so this test has no checked-in binary fixture.
+/// Writes a short mono 16-bit PCM sine-wave WAV fixture at `INPUT_RATE`,
+/// hand-built as raw bytes. This crate only links the FFmpeg *libraries*
+/// (no dev setup step installs the `ffmpeg` CLI), so the fixture must not
+/// depend on an external binary -- and a plain WAV header is simple enough
+/// that it doesn't need one.
 fn generate_input_wav(path: &std::path::Path) {
-    let status = Command::new("ffmpeg")
-        .args([
-            "-y",
-            "-f",
-            "lavfi",
-            "-i",
-            &format!("sine=frequency=440:duration=1:sample_rate={INPUT_RATE}"),
-            path.to_str().unwrap(),
-        ])
-        .status()
-        .expect("failed to run system ffmpeg to generate the test fixture");
+    const FREQUENCY_HZ: f64 = 440.0;
+    const DURATION_SECS: u32 = 1;
+    const BITS_PER_SAMPLE: u16 = 16;
+    const CHANNELS: u16 = 1;
 
-    assert!(status.success(), "ffmpeg fixture generation failed");
+    let num_samples = INPUT_RATE * DURATION_SECS;
+    let block_align = CHANNELS * (BITS_PER_SAMPLE / 8);
+    let byte_rate = INPUT_RATE * u32::from(block_align);
+    let data_size = num_samples * u32::from(block_align);
+
+    let mut wav = Vec::with_capacity(44 + data_size as usize);
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + data_size).to_le_bytes());
+    wav.extend_from_slice(b"WAVE");
+
+    wav.extend_from_slice(b"fmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes()); // fmt chunk size (PCM)
+    wav.extend_from_slice(&1u16.to_le_bytes()); // audio format: PCM
+    wav.extend_from_slice(&CHANNELS.to_le_bytes());
+    wav.extend_from_slice(&INPUT_RATE.to_le_bytes());
+    wav.extend_from_slice(&byte_rate.to_le_bytes());
+    wav.extend_from_slice(&block_align.to_le_bytes());
+    wav.extend_from_slice(&BITS_PER_SAMPLE.to_le_bytes());
+
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&data_size.to_le_bytes());
+
+    for n in 0..num_samples {
+        let t = f64::from(n) / f64::from(INPUT_RATE);
+        let amplitude = (t * FREQUENCY_HZ * 2.0 * std::f64::consts::PI).sin();
+        let sample = (amplitude * f64::from(i16::MAX) * 0.8) as i16;
+        wav.extend_from_slice(&sample.to_le_bytes());
+    }
+
+    std::fs::write(path, wav).expect("failed to write test fixture WAV");
 }
 
 fn output_sample_rate(path: &std::path::Path) -> u32 {

@@ -109,9 +109,9 @@ fn transcoder<P: AsRef<Path> + ?Sized>(
             layouts.best(decoder.ch_layout().channels())
         }
     };
-
+    let output_rate = target_rate.unwrap_or(decoder.rate() as i32);
     encoder.set_ch_layout(ch_layout);
-    encoder.set_rate(target_rate.unwrap_or(decoder.rate() as i32));
+    encoder.set_rate(output_rate);
     #[cfg(not(feature = "ffmpeg_9_0"))]
     encoder.set_format(
         codec
@@ -131,8 +131,8 @@ fn transcoder<P: AsRef<Path> + ?Sized>(
     encoder.set_bit_rate(decoder.bit_rate());
     encoder.set_max_bit_rate(decoder.max_bit_rate());
 
-    encoder.set_time_base((1, decoder.rate() as i32));
-    output.set_time_base((1, decoder.rate() as i32));
+    encoder.set_time_base((1, output_rate));
+    output.set_time_base((1, output_rate));
 
     let encoder = encoder.open_as(codec)?;
     output.set_parameters(Parameters::from(&encoder));
@@ -223,6 +223,12 @@ impl Transcoder {
 //
 // Example 3: Seek to a specified position (in seconds)
 // transcode-audio in.mp3 out.mp3 anull 30
+//
+// Example 4: Set the output sample rate. This only re-tags the encoder's
+// rate -- it does not resample the audio data itself, so pair it with a
+// matching resample filter (e.g. aresample) or the output will be
+// mistimed.
+// transcode-audio in.wav out.wav "aresample=44100" "" 44100
 fn main() {
     ffmpeg::init().unwrap();
 
