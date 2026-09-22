@@ -61,6 +61,7 @@ struct Transcoder {
     decoder: codec::decoder::Audio,
     encoder: codec::encoder::Audio,
     in_time_base: ffmpeg::Rational,
+    encoder_time_base: ffmpeg::Rational,
     out_time_base: ffmpeg::Rational,
 }
 
@@ -131,8 +132,9 @@ fn transcoder<P: AsRef<Path> + ?Sized>(
     encoder.set_bit_rate(decoder.bit_rate());
     encoder.set_max_bit_rate(decoder.max_bit_rate());
 
-    encoder.set_time_base((1, output_rate));
-    output.set_time_base((1, output_rate));
+    let encoder_time_base: ffmpeg::Rational = (1, output_rate).into();
+    encoder.set_time_base(encoder_time_base);
+    output.set_time_base(encoder_time_base);
 
     let encoder = encoder.open_as(codec)?;
     output.set_parameters(Parameters::from(&encoder));
@@ -148,6 +150,7 @@ fn transcoder<P: AsRef<Path> + ?Sized>(
         decoder,
         encoder,
         in_time_base,
+        encoder_time_base,
         out_time_base,
     })
 }
@@ -165,7 +168,7 @@ impl Transcoder {
         let mut encoded = ffmpeg::Packet::empty();
         while self.encoder.receive_packet(&mut encoded).is_ok() {
             encoded.set_stream(0);
-            encoded.rescale_ts(self.in_time_base, self.out_time_base);
+            encoded.rescale_ts(self.encoder_time_base, self.out_time_base);
             encoded.write_interleaved(octx).unwrap();
         }
     }
